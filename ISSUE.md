@@ -4,7 +4,7 @@
 
 The `happy connect` command authenticates users with OpenAI, Anthropic, and Google via OAuth, then sends the resulting tokens to the Happy server (`api.happy-servers.com`). Unlike session data, which is end-to-end encrypted with a user-held key, these vendor tokens are encrypted server-side with a server-held secret (`HANDY_MASTER_SECRET`). The server can decrypt them at any time.
 
-The Google/Gemini OAuth flow requests the `cloud-platform` scope, which grants access to all GCP services — not just Gemini.
+The Google/Gemini OAuth flow requests the `cloud-platform` scope with a refresh token, which is effectively root access to the user's entire GCP account — not just Gemini.
 
 No code in the server codebase currently uses these tokens to call any vendor API.
 
