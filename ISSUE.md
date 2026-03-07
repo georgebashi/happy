@@ -1,10 +1,18 @@
 # Vendor API tokens (OpenAI, Anthropic, Gemini) are sent to remote server with no disclosed use and misleading encryption claims
 
-## Summary
+## If you have used `happy connect`, rotate your API keys now
 
-The `happy connect` command collects users' OAuth tokens for OpenAI, Anthropic, and Gemini and transmits them to the Happy server (`api.happy-servers.com`), where they are stored with server-side encryption. The server can decrypt these tokens at any time. There is no code anywhere in the codebase that uses these tokens to provide functionality to the user. Meanwhile, the project's README and documentation prominently advertise "end-to-end encryption," which does not apply to these vendor tokens.
+Happy Coder's `happy connect` command asks users to authenticate with OpenAI, Anthropic, and Google Gemini via OAuth, then silently sends the resulting tokens to Happy's remote server (`api.happy-servers.com`). Despite the project's prominent claims of "end-to-end encryption," these vendor tokens are **not** end-to-end encrypted — they are encrypted with a server-held secret (`HANDY_MASTER_SECRET`), meaning the server operator can decrypt every stored token at any time. There is no code in the entire codebase that actually *uses* these tokens to provide any functionality. The tokens are collected, sent to a third party, and stored — and that's it.
 
-## Details
+**If you have used `happy connect codex`, `happy connect claude`, or `happy connect gemini`, you should immediately rotate your API keys / revoke OAuth sessions for the affected services:**
+
+- **OpenAI**: https://platform.openai.com/api-keys
+- **Anthropic**: https://console.anthropic.com/settings/keys
+- **Google (Gemini)**: https://myaccount.google.com/permissions — revoke access for the Happy Coder app
+
+The rest of this issue provides detailed code references supporting each of these claims.
+
+## Detailed findings
 
 ### 1. Tokens are collected and sent to a remote server
 
@@ -113,9 +121,19 @@ model ServiceAccountToken {
 
 Users who run `happy connect` hand over their OAuth tokens for OpenAI, Anthropic, and/or Gemini to a third-party server that can decrypt them at any time, for a feature that does not yet exist. The project's prominent "end-to-end encrypted" marketing does not apply to these tokens, and no clear disclosure is made about the different security model.
 
-## Suggested remediation
+## Recommended actions for users
 
-1. **Disclose the security model clearly** — The `happy connect` command and associated documentation should clearly state that vendor tokens are stored with server-side encryption (not E2E) and are accessible to the server operator.
-2. **Don't collect what you don't use** — If no feature currently requires these tokens on the server, don't collect them. If the plan is to use them in the future, wait until the feature exists.
+**Rotate your credentials immediately** if you have used any `happy connect` subcommand:
+
+- **OpenAI**: Revoke and regenerate keys at https://platform.openai.com/api-keys
+- **Anthropic**: Revoke and regenerate keys at https://console.anthropic.com/settings/keys
+- **Google (Gemini)**: Revoke Happy Coder's access at https://myaccount.google.com/permissions
+
+Until this is resolved, **do not use `happy connect`**.
+
+## Suggested remediation for maintainers
+
+1. **Don't collect what you don't use** — If no feature currently requires these tokens on the server, don't collect them. If the plan is to use them in the future, wait until the feature exists.
+2. **Disclose the security model clearly** — The `happy connect` command and associated documentation should clearly state that vendor tokens are stored with server-side encryption (not E2E) and are accessible to the server operator.
 3. **Consider true E2E encryption for vendor tokens** — Encrypt vendor tokens client-side with the user's key, the same way session data is handled. Only decrypt them on the client when needed.
 4. **Correct marketing claims** — Qualify the "end-to-end encrypted" claims to exclude vendor tokens, or implement actual E2E for them.
