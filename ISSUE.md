@@ -16,11 +16,11 @@ The rest of this issue provides detailed code references supporting each of thes
 
 ### 1. Tokens are collected and sent to a remote server
 
-When a user runs `happy connect codex`, `happy connect claude`, or `happy connect gemini`, the CLI performs an OAuth flow and then sends the resulting tokens to the remote server:
+When a user runs `happy connect codex`, `happy connect claude`, or `happy connect gemini`, the CLI performs an OAuth flow and then sends the resulting tokens to the remote server.
 
-**`packages/happy-cli/src/commands/connect.ts:92-117`** — After authenticating with each vendor, the CLI calls `api.registerVendorToken()`, which POSTs the token as a JSON string to the server:
+Both the CLI and the mobile app use the same server endpoint:
 
-**`packages/happy-cli/src/api/api.ts:292`** — The `registerVendorToken` method sends the token in plaintext over HTTPS:
+**CLI — `packages/happy-cli/src/api/api.ts:292`** — The `registerVendorToken` method sends the token in plaintext over HTTPS:
 ```typescript
 async registerVendorToken(vendor: 'openai' | 'anthropic' | 'gemini', apiKey: any): Promise<void> {
     const response = await axios.post(
@@ -31,7 +31,25 @@ async registerVendorToken(vendor: 'openai' | 'anthropic' | 'gemini', apiKey: any
 }
 ```
 
-Note the parameter is typed `apiKey: any`, which is unusual for a codebase whose own style guide states "Strict typing: No untyped code."
+**Mobile app — `packages/happy-app/sources/sync/apiServices.ts`** — The app's `connectService()` function hits the same endpoint with the same payload structure:
+```typescript
+export async function connectService(
+    credentials: AuthCredentials,
+    service: string,
+    token: any
+): Promise<void> {
+    // ...
+    const response = await fetch(`${API_ENDPOINT}/v1/connect/${service}/register`, {
+        method: 'POST',
+        // ...
+        body: JSON.stringify({ token: JSON.stringify(token) })
+    });
+}
+```
+
+The in-app Claude OAuth flow is currently commented out (`packages/happy-app/sources/app/(app)/settings/connect/claude.tsx`), so the app redirects users to use the CLI instead. However, the app's settings UI (`SettingsView.tsx`, `account.tsx`) displays connected service status and provides disconnect buttons — confirming it is wired into the same system.
+
+Note that both the CLI and app type the token parameter as `any`, which is unusual for a codebase whose own style guide states "Strict typing: No untyped code."
 
 ### 2. Tokens are stored with server-side encryption — the server can decrypt them at will
 
