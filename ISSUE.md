@@ -1,8 +1,8 @@
-# Vendor API tokens (OpenAI, Anthropic, Gemini) are sent to remote server with no disclosed use and misleading encryption claims
+# Vendor API tokens (OpenAI, Anthropic, Gemini) are sent to remote server with no disclosed use and unclear encryption scope
 
 ## If you have used `happy connect`, rotate your API keys now
 
-Happy Coder's `happy connect` command asks users to authenticate with OpenAI, Anthropic, and Google Gemini via OAuth, then silently sends the resulting tokens to Happy's remote server (`api.happy-servers.com`). Despite the project's prominent claims of "end-to-end encryption," these vendor tokens are **not** end-to-end encrypted — they are encrypted with a server-held secret (`HANDY_MASTER_SECRET`), meaning the server operator can decrypt every stored token at any time. There is no code in the entire codebase that actually *uses* these tokens to provide any functionality. The tokens are collected, sent to a third party, and stored — and that's it.
+Happy Coder's `happy connect` command asks users to authenticate with OpenAI, Anthropic, and Google Gemini via OAuth, then sends the resulting tokens to Happy's remote server (`api.happy-servers.com`). Despite the project's prominent claims of "end-to-end encryption," these vendor tokens are **not** end-to-end encrypted — they are encrypted with a server-held secret (`HANDY_MASTER_SECRET`), meaning the server operator can decrypt every stored token at any time. There is no code in the entire codebase that actually *uses* these tokens to provide any functionality. The tokens are collected, sent to a third party, and stored — and that's it.
 
 **If you have used `happy connect codex`, `happy connect claude`, or `happy connect gemini`, you should immediately rotate your API keys / revoke OAuth sessions for the affected services:**
 
@@ -87,7 +87,7 @@ A search across the entire server codebase for any code that reads a vendor toke
 
 The `lastUsedAt` field in the database schema (`packages/happy-server/prisma/schema.prisma:240-253`) is never updated — it is always `null`. There is no feature in the product that requires these tokens.
 
-### 4. README and docs make misleading end-to-end encryption claims
+### 4. README and docs do not distinguish encryption models
 
 **`README.md:8`**:
 > Use Claude Code or Codex from anywhere with end-to-end encryption.
@@ -98,7 +98,7 @@ The `lastUsedAt` field in the database schema (`packages/happy-server/prisma/sch
 **`packages/happy-cli/CLAUDE.md`** (developer docs):
 > End-to-end encryption for all communications
 
-These claims are accurate for *session data* (messages, artifacts, etc.), which is encrypted client-side. However, they are misleading in the context of the `happy connect` feature, where vendor tokens use a fundamentally different security model. The project's own internal documentation acknowledges this distinction:
+These claims are accurate for *session data* (messages, artifacts, etc.), which is encrypted client-side. However, they do not distinguish the `happy connect` feature, where vendor tokens use a fundamentally different security model. The project's own internal documentation acknowledges this distinction:
 
 **`docs/encryption.md:518`**:
 > These are encrypted with a server-only KeyTree derived from `HANDY_MASTER_SECRET` and **are not end-to-end encrypted**.
@@ -150,4 +150,4 @@ Until this is resolved, **do not use `happy connect`**.
 1. **Don't collect what you don't use** — If no feature currently requires these tokens on the server, don't collect them. If the plan is to use them in the future, wait until the feature exists.
 2. **Disclose the security model clearly** — The `happy connect` command and associated documentation should clearly state that vendor tokens are stored with server-side encryption (not E2E) and are accessible to the server operator.
 3. **Consider true E2E encryption for vendor tokens** — Encrypt vendor tokens client-side with the user's key, the same way session data is handled. Only decrypt them on the client when needed.
-4. **Correct marketing claims** — Qualify the "end-to-end encrypted" claims to exclude vendor tokens, or implement actual E2E for them.
+4. **Clarify encryption scope** — Qualify the "end-to-end encrypted" statements to exclude vendor tokens, or implement actual E2E for them.
