@@ -10,8 +10,6 @@ Happy Coder's `happy connect` command asks users to authenticate with OpenAI, An
 - **Anthropic**: https://console.anthropic.com/settings/keys
 - **Google (Gemini)**: https://myaccount.google.com/permissions — revoke access for the Happy Coder app
 
-The rest of this issue provides detailed code references supporting each of these claims.
-
 ## Detailed findings
 
 ### 1. Tokens are collected and sent to a remote server
