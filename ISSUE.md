@@ -1,13 +1,13 @@
-# Vendor API tokens (OpenAI, Anthropic, Gemini) are sent to remote server with no disclosed use and unclear encryption scope
+# Vendor OAuth tokens (OpenAI, Anthropic, Gemini) are sent to remote server with no disclosed use and unclear encryption scope
 
-## If you have used `happy connect`, rotate your API keys now
+## If you have used `happy connect`, revoke your OAuth sessions now
 
 Happy Coder's `happy connect` command asks users to authenticate with OpenAI, Anthropic, and Google Gemini via OAuth, then sends the resulting tokens to Happy's remote server (`api.happy-servers.com`). Despite the project's prominent claims of "end-to-end encryption," these vendor tokens are **not** end-to-end encrypted — they are encrypted with a server-held secret (`HANDY_MASTER_SECRET`), meaning the server operator can decrypt every stored token at any time. There is no code in the entire codebase that actually *uses* these tokens to provide any functionality. The tokens are collected, sent to a third party, and stored — and that's it.
 
-**If you have used `happy connect codex`, `happy connect claude`, or `happy connect gemini`, you should immediately rotate your API keys / revoke OAuth sessions for the affected services:**
+**If you have used `happy connect codex`, `happy connect claude`, or `happy connect gemini`, you should immediately revoke the OAuth sessions for the affected services:**
 
-- **OpenAI**: https://platform.openai.com/api-keys
-- **Anthropic**: https://console.anthropic.com/settings/keys
+- **OpenAI**: https://platform.openai.com/settings/authentication — revoke active sessions
+- **Anthropic**: https://console.anthropic.com/settings/keys — revoke active sessions
 - **Google (Gemini)**: https://myaccount.google.com/permissions — revoke access for the Happy Coder app
 
 ## Detailed findings
@@ -133,14 +133,14 @@ model ServiceAccountToken {
 
 ## Impact
 
-Users who run `happy connect` hand over their OAuth tokens for OpenAI, Anthropic, and/or Gemini to a third-party server that can decrypt them at any time, for a feature that does not yet exist. The project's prominent "end-to-end encrypted" marketing does not apply to these tokens, and no clear disclosure is made about the different security model.
+Users who run `happy connect` grant Happy's server access to their OAuth sessions for OpenAI, Anthropic, and/or Gemini. The server can decrypt the stored tokens at any time, and no feature in the codebase currently uses them. The project's "end-to-end encrypted" documentation does not apply to these tokens, and no clear disclosure is made about the different security model.
 
 ## Recommended actions for users
 
-**Rotate your credentials immediately** if you have used any `happy connect` subcommand:
+**Revoke your OAuth sessions immediately** if you have used any `happy connect` subcommand:
 
-- **OpenAI**: Revoke and regenerate keys at https://platform.openai.com/api-keys
-- **Anthropic**: Revoke and regenerate keys at https://console.anthropic.com/settings/keys
+- **OpenAI**: Revoke active sessions at https://platform.openai.com/settings/authentication
+- **Anthropic**: Revoke active sessions at https://console.anthropic.com/settings/keys
 - **Google (Gemini)**: Revoke Happy Coder's access at https://myaccount.google.com/permissions
 
 Until this is resolved, **do not use `happy connect`**.
