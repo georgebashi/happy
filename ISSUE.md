@@ -1,20 +1,16 @@
-# `happy connect` collects powerful OAuth tokens, sends them to a server that can read them, and doesn't use them
+# `happy connect` OAuth tokens are not end-to-end encrypted and use overly broad scopes
 
-## If you have used `happy connect`, revoke your OAuth sessions now
+## Summary
 
-Happy Coder's `happy connect` command asks users to authenticate with OpenAI, Anthropic, and Google via OAuth, then sends the resulting tokens to Happy's remote server (`api.happy-servers.com`). The project's prominent claims of "end-to-end encryption" do not apply to these tokens — they are encrypted with a server-held key, meaning the server operator can decrypt them at will. No code in the codebase actually uses these tokens to provide any feature. The tokens are collected, sent to a third party, and stored.
+The `happy connect` command authenticates users with OpenAI, Anthropic, and Google via OAuth, then sends the resulting tokens to the Happy server (`api.happy-servers.com`). Unlike session data, which is end-to-end encrypted with a user-held key, these vendor tokens are encrypted server-side with a server-held secret (`HANDY_MASTER_SECRET`). The server can decrypt them at any time.
 
-**If you have used `happy connect codex`, `happy connect claude`, or `happy connect gemini`, you should immediately revoke the OAuth sessions:**
+The Google/Gemini OAuth flow requests the `cloud-platform` scope, which grants access to all GCP services — not just Gemini.
 
-- **OpenAI**: https://platform.openai.com/settings/authentication — revoke active sessions
-- **Anthropic**: https://console.anthropic.com/settings/keys — revoke active sessions
-- **Google (Gemini)**: https://myaccount.google.com/permissions — revoke access for the Happy Coder app
+No code in the server codebase currently uses these tokens to call any vendor API.
 
-## What these tokens can actually do
+## OAuth scopes requested
 
-The OAuth scopes requested by `happy connect` vary dramatically in power. Users consenting to the OAuth prompts may not fully appreciate what they are granting, especially given that the project markets itself as "end-to-end encrypted."
-
-### Google/Gemini: `cloud-platform` — full access to all GCP services
+### Google/Gemini: `cloud-platform`
 
 **`packages/happy-cli/src/commands/connect/authenticateGemini.ts:22-26`**:
 ```typescript
@@ -25,37 +21,29 @@ const SCOPES = [
 ].join(' ');
 ```
 
-The `cloud-platform` scope is the broadest Google Cloud scope that exists. It grants full access to **all** GCP services the user's account can reach — not just Gemini. This includes:
+The `cloud-platform` scope grants access to all GCP services the authenticated account can reach — Cloud Storage, BigQuery, Compute Engine, IAM, Cloud SQL, Secret Manager, etc. The flow also sets `access_type: 'offline'` (line 236), which requests a refresh token that can mint new access tokens without further user interaction.
 
-- **Cloud Storage** — read/write/delete any GCS bucket
-- **BigQuery** — query any dataset
-- **Compute Engine** — create, modify, or delete VMs
-- **IAM** — view and potentially modify permissions
-- **Cloud SQL, Pub/Sub, Cloud Functions, Secret Manager**, and every other GCP API
-
-With `access_type: 'offline'` (line 236), the flow also requests a **refresh token**, so the server can mint new access tokens indefinitely without further user interaction. An `offline` refresh token with `cloud-platform` scope is, in effect, persistent root access to a user's entire Google Cloud account.
-
-### Anthropic/Claude: `user:inference` — make API calls as the user
+### Anthropic/Claude: `user:inference`
 
 **`packages/happy-cli/src/commands/connect/authenticateClaude.ts:18`**:
 ```typescript
 const SCOPE = 'user:inference';
 ```
 
-This token allows making Claude API calls charged to the user's Anthropic account. The server could consume the user's credits or quota.
+This scope allows making Claude API inference calls on behalf of the user.
 
-### OpenAI/Codex: `openid profile email offline_access` — identity only (but with refresh)
+### OpenAI/Codex: `openid profile email offline_access`
 
 **`packages/happy-cli/src/commands/connect/authenticateCodex.ts:253`**:
 ```typescript
 ['scope', 'openid profile email offline_access'],
 ```
 
-These are identity scopes — they can read the user's OpenAI profile and email, but not make API calls. However, `offline_access` grants a refresh token, giving persistent access to identity information.
+These are identity-only scopes (profile and email), plus `offline_access` for a refresh token.
 
-## The "end-to-end encryption" claim creates a false sense of safety
+## Encryption model differs from documented E2E
 
-Happy prominently markets end-to-end encryption as a core feature:
+The project documents end-to-end encryption as a core property:
 
 **`README.md:8`**:
 > Use Claude Code or Codex from anywhere with end-to-end encryption.
@@ -66,32 +54,23 @@ Happy prominently markets end-to-end encryption as a core feature:
 **`packages/happy-server/README.md:11`**:
 > 🔐 **Zero Knowledge** - The server stores encrypted data but has no ability to decrypt it
 
-These claims are true for *session data* (messages, code, artifacts), which is encrypted client-side with the user's key. But `happy connect` vendor tokens follow a completely different model — they are encrypted server-side with a server-held secret (`HANDY_MASTER_SECRET`). The server can decrypt every stored vendor token at any time.
+Session data (messages, code, artifacts) is encrypted client-side with the user's key, consistent with these claims. Vendor tokens from `happy connect` are not — they are encrypted with a server-held `HANDY_MASTER_SECRET` via a `KeyTree` from `privacy-kit`.
 
-The project's own internal documentation acknowledges this:
+The project's internal documentation notes this distinction:
 
 **`docs/encryption.md:518`**:
 > These are encrypted with a server-only KeyTree derived from `HANDY_MASTER_SECRET` and **are not end-to-end encrypted**.
 
-But this distinction is never surfaced to users. When a user who chose Happy *because* of its E2E encryption claims is prompted to `happy connect gemini`, they have no reason to suspect these tokens are handled differently from everything else. The CLI help text reinforces this:
+This distinction is not communicated to users. The CLI help text describes the feature as:
 
 **`packages/happy-cli/src/commands/connect.ts:61-63`**:
-> The connect command allows you to securely store your AI vendor API keys in Happy cloud. This enables you to use these services through Happy without exposing your API keys locally.
+> The connect command allows you to securely store your AI vendor API keys in Happy cloud.
 
-No disclosure is made that the server operator can read these tokens.
+## Server-side token handling
 
-## Tokens are collected but never used
+Tokens are stored encrypted and can be decrypted by the server on request:
 
-A search across the entire server codebase for any code that reads a vendor token and calls an external API returns zero results. The only references to `ServiceAccountToken` are CRUD operations:
-
-- **`connectRoutes.ts`** — store, retrieve, and delete tokens
-- **`accountRoutes.ts:26`** — list which vendors are connected (status display)
-
-The `lastUsedAt` field in the database schema (`packages/happy-server/prisma/schema.prisma:249`) is never updated — it is always `null`. There is no feature in the product that requires these tokens on the server.
-
-## How the tokens are stored and accessed
-
-**`packages/happy-server/sources/app/api/routes/connectRoutes.ts:248-267`** — The server encrypts tokens with a key it holds:
+**`packages/happy-server/sources/app/api/routes/connectRoutes.ts:248-267`** — storage:
 ```typescript
 const encrypted = encryptString(
     ['user', userId, 'vendors', request.params.vendor, 'token'],
@@ -100,14 +79,14 @@ const encrypted = encryptString(
 await db.serviceAccountToken.upsert({ /* ... */ });
 ```
 
-**`connectRoutes.ts:269-332`** — The server has endpoints that decrypt and return tokens in plaintext:
+**`connectRoutes.ts:269-332`** — retrieval (decrypts and returns plaintext):
 ```typescript
 // GET /v1/connect/:vendor/token
 return reply.send({
     token: decryptString(['user', userId, 'vendors', request.params.vendor, 'token'], token.token)
 });
 
-// GET /v1/connect/tokens — returns ALL decrypted vendor tokens
+// GET /v1/connect/tokens — returns all decrypted vendor tokens
 for (const token of tokens) {
     decrypted.push({
         vendor: token.vendor,
@@ -116,24 +95,8 @@ for (const token of tokens) {
 }
 ```
 
-Both the CLI (`packages/happy-cli/src/api/api.ts:292`) and mobile app (`packages/happy-app/sources/sync/apiServices.ts`) send tokens to the same endpoint in plaintext JSON over HTTPS.
+Both the CLI (`packages/happy-cli/src/api/api.ts:292`) and mobile app (`packages/happy-app/sources/sync/apiServices.ts`) transmit tokens to the same server endpoint.
 
-## Recommended actions for users
+## Tokens are not used by any server-side feature
 
-**Revoke your OAuth sessions immediately** if you have used any `happy connect` subcommand:
-
-- **OpenAI**: Revoke active sessions at https://platform.openai.com/settings/authentication
-- **Anthropic**: Revoke active sessions at https://console.anthropic.com/settings/keys
-- **Google (Gemini)**: Revoke Happy Coder's access at https://myaccount.google.com/permissions
-
-The Google revocation is especially important given the `cloud-platform` scope.
-
-Until this is resolved, **do not use `happy connect`**.
-
-## Suggested remediation for maintainers
-
-1. **Don't collect what you don't use** — No feature currently requires these tokens on the server. Don't collect them until one exists.
-2. **Use least-privilege scopes** — The Gemini flow should not request `cloud-platform`. If the intent is only Gemini API access, use `https://www.googleapis.com/auth/generative-language` or a similarly narrow scope.
-3. **Disclose the security model** — If vendor tokens must be stored server-side, the `happy connect` command and documentation should clearly state they are not end-to-end encrypted and are accessible to the server operator.
-4. **Consider true E2E for vendor tokens** — Encrypt vendor tokens client-side with the user's key, the same way session data is handled.
-5. **Qualify the "end-to-end encrypted" claims** — The current blanket statements are misleading when a major feature uses server-side encryption.
+No code in the server calls any vendor API using stored tokens. The `ServiceAccountToken` model is referenced only for CRUD operations in `connectRoutes.ts` and a status check in `accountRoutes.ts:26`. The `lastUsedAt` field in the database schema (`packages/happy-server/prisma/schema.prisma:249`) is never updated.
