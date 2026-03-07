@@ -49,8 +49,6 @@ export async function connectService(
 
 The in-app Claude OAuth flow is currently commented out (`packages/happy-app/sources/app/(app)/settings/connect/claude.tsx`), so the app redirects users to use the CLI instead. However, the app's settings UI (`SettingsView.tsx`, `account.tsx`) displays connected service status and provides disconnect buttons — confirming it is wired into the same system.
 
-Note that both the CLI and app type the token parameter as `any`, which is unusual for a codebase whose own style guide states "Strict typing: No untyped code."
-
 ### 2. Tokens are stored with server-side encryption — the server can decrypt them at will
 
 **`packages/happy-server/sources/app/api/routes/connectRoutes.ts:248-267`** — The server encrypts the token using a `KeyTree` derived from `HANDY_MASTER_SECRET` and stores it in the database:
