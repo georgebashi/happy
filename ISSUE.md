@@ -1,8 +1,15 @@
-# `happy connect` requests root GCP access via overly broad OAuth scope
+# `happy connect` requests root GCP access and stores it without E2E encryption
 
 ## Summary
 
 The `happy connect` command's Google/Gemini OAuth flow requests the `cloud-platform` scope, which is effectively root access to the user's entire GCP account — not just Gemini. This token, along with tokens for Anthropic and OpenAI, is then sent to the Happy server where it is encrypted with a server-held secret rather than the user's end-to-end encryption key. No code in the server codebase currently uses any of these tokens.
+
+Specifically:
+
+- The Google/Gemini OAuth scope (`cloud-platform`) is wildly overprivileged — it grants access to all GCP services, not just Gemini.
+- Users are not informed that these tokens are stored without end-to-end encryption. The project markets itself as E2E encrypted and zero-knowledge, and the fact that vendor tokens are excluded from this is buried in [internal architecture docs](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/docs/encryption.md#L518).
+- These tokens are currently completely unused — no server code calls any vendor API with them — so they shouldn't be collected at all.
+- It's unclear what these tokens would ever be used for, since the scopes are vastly different per provider (root GCP access vs inference-only vs identity-only). Any feature built on these would need significant rework to bring the scopes into alignment.
 
 ## The Gemini flow requests root GCP access
 
