@@ -10,93 +10,26 @@ No code in the server codebase currently uses these tokens to call any vendor AP
 
 ## OAuth scopes requested
 
-### Google/Gemini: `cloud-platform`
+The three `happy connect` subcommands request OAuth scopes with very different levels of access.
 
-**`packages/happy-cli/src/commands/connect/authenticateGemini.ts:22-26`**:
-```typescript
-const SCOPES = [
-    'https://www.googleapis.com/auth/cloud-platform',
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/userinfo.profile',
-].join(' ');
-```
+The [Gemini flow](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect/authenticateGemini.ts#L22-L26) requests `cloud-platform`, `userinfo.email`, and `userinfo.profile`. The `cloud-platform` scope grants access to all GCP services the authenticated account can reach — Cloud Storage, BigQuery, Compute Engine, IAM, Cloud SQL, Secret Manager, etc. The flow also sets [`access_type: 'offline'`](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect/authenticateGemini.ts#L236), which requests a refresh token that can mint new access tokens without further user interaction.
 
-The `cloud-platform` scope grants access to all GCP services the authenticated account can reach — Cloud Storage, BigQuery, Compute Engine, IAM, Cloud SQL, Secret Manager, etc. The flow also sets `access_type: 'offline'` (line 236), which requests a refresh token that can mint new access tokens without further user interaction.
+The [Claude flow](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect/authenticateClaude.ts#L18) requests `user:inference`, which allows making Claude API inference calls on behalf of the user.
 
-### Anthropic/Claude: `user:inference`
-
-**`packages/happy-cli/src/commands/connect/authenticateClaude.ts:18`**:
-```typescript
-const SCOPE = 'user:inference';
-```
-
-This scope allows making Claude API inference calls on behalf of the user.
-
-### OpenAI/Codex: `openid profile email offline_access`
-
-**`packages/happy-cli/src/commands/connect/authenticateCodex.ts:253`**:
-```typescript
-['scope', 'openid profile email offline_access'],
-```
-
-These are identity-only scopes (profile and email), plus `offline_access` for a refresh token.
+The [Codex flow](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect/authenticateCodex.ts#L253) requests `openid profile email offline_access` — identity-only scopes (profile and email), plus `offline_access` for a refresh token.
 
 ## Encryption model differs from documented E2E
 
-The project documents end-to-end encryption as a core property:
+The project documents end-to-end encryption as a core property. The [README](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/README.md#L8) states "Use Claude Code or Codex from anywhere with end-to-end encryption," and further [describes](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/README.md#L84) the project as "End-to-end encrypted — Your code never leaves your devices unencrypted." The [server README](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/README.md#L11) claims "Zero Knowledge - The server stores encrypted data but has no ability to decrypt it."
 
-**`README.md:8`**:
-> Use Claude Code or Codex from anywhere with end-to-end encryption.
+Session data (messages, code, artifacts) is encrypted client-side with the user's key, consistent with these claims. Vendor tokens from `happy connect` are not — they are encrypted with a server-held `HANDY_MASTER_SECRET` via a `KeyTree` from `privacy-kit`. The project's own [encryption documentation](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/docs/encryption.md#L518) notes this: "These are encrypted with a server-only KeyTree derived from `HANDY_MASTER_SECRET` and are not end-to-end encrypted."
 
-**`README.md:84`**:
-> 🔐 **End-to-end encrypted** — Your code never leaves your devices unencrypted
-
-**`packages/happy-server/README.md:11`**:
-> 🔐 **Zero Knowledge** - The server stores encrypted data but has no ability to decrypt it
-
-Session data (messages, code, artifacts) is encrypted client-side with the user's key, consistent with these claims. Vendor tokens from `happy connect` are not — they are encrypted with a server-held `HANDY_MASTER_SECRET` via a `KeyTree` from `privacy-kit`.
-
-The project's internal documentation notes this distinction:
-
-**`docs/encryption.md:518`**:
-> These are encrypted with a server-only KeyTree derived from `HANDY_MASTER_SECRET` and **are not end-to-end encrypted**.
-
-This distinction is not communicated to users. The CLI help text describes the feature as:
-
-**`packages/happy-cli/src/commands/connect.ts:61-63`**:
-> The connect command allows you to securely store your AI vendor API keys in Happy cloud.
+This distinction is not communicated to users. The [CLI help text](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect.ts#L61-L63) describes the feature only as: "The connect command allows you to securely store your AI vendor API keys in Happy cloud."
 
 ## Server-side token handling
 
-Tokens are stored encrypted and can be decrypted by the server on request:
-
-**`packages/happy-server/sources/app/api/routes/connectRoutes.ts:248-267`** — storage:
-```typescript
-const encrypted = encryptString(
-    ['user', userId, 'vendors', request.params.vendor, 'token'],
-    request.body.token
-);
-await db.serviceAccountToken.upsert({ /* ... */ });
-```
-
-**`connectRoutes.ts:269-332`** — retrieval (decrypts and returns plaintext):
-```typescript
-// GET /v1/connect/:vendor/token
-return reply.send({
-    token: decryptString(['user', userId, 'vendors', request.params.vendor, 'token'], token.token)
-});
-
-// GET /v1/connect/tokens — returns all decrypted vendor tokens
-for (const token of tokens) {
-    decrypted.push({
-        vendor: token.vendor,
-        token: decryptString(['user', userId, 'vendors', token.vendor, 'token'], token.token)
-    });
-}
-```
-
-Both the CLI (`packages/happy-cli/src/api/api.ts:292`) and mobile app (`packages/happy-app/sources/sync/apiServices.ts`) transmit tokens to the same server endpoint.
+Tokens are [encrypted with the server-held key and stored](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/sources/app/api/routes/connectRoutes.ts#L248-L267) on registration. The server exposes endpoints that [decrypt and return individual tokens](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/sources/app/api/routes/connectRoutes.ts#L269-L292) or [all vendor tokens at once](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/sources/app/api/routes/connectRoutes.ts#L312-L332) in plaintext. Both the [CLI](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/api/api.ts#L292) and [mobile app](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-app/sources/sync/apiServices.ts) transmit tokens to the same server endpoint.
 
 ## Tokens are not used by any server-side feature
 
-No code in the server calls any vendor API using stored tokens. The `ServiceAccountToken` model is referenced only for CRUD operations in `connectRoutes.ts` and a status check in `accountRoutes.ts:26`. The `lastUsedAt` field in the database schema (`packages/happy-server/prisma/schema.prisma:249`) is never updated.
+No code in the server calls any vendor API using stored tokens. The `ServiceAccountToken` model is referenced only for CRUD operations in [`connectRoutes.ts`](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/sources/app/api/routes/connectRoutes.ts) and a status check in [`accountRoutes.ts`](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/sources/app/api/routes/accountRoutes.ts#L26). The [`lastUsedAt` field](https://github.com/georgebashi/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-server/prisma/schema.prisma#L249) in the database schema is never updated.
