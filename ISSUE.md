@@ -1,4 +1,4 @@
-# `happy connect` requests broad GCP scope and stores tokens with server-side encryption
+# `happy connect` requests root GCP access and stores tokens without E2E encryption
 
 ## Summary
 
@@ -9,9 +9,9 @@ Specifically:
 - The Google/Gemini OAuth scope (`cloud-platform`) grants access to all GCP services, not just Gemini.
 - Vendor tokens are stored with server-side encryption rather than the user's E2E encryption key. This is documented in [internal architecture docs](https://github.com/slopus/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/docs/encryption.md#L518) but not surfaced to users during the connect flow.
 - No server code currently calls any vendor API with these tokens.
-- The three providers use very different scope levels (full GCP access vs inference-only vs identity-only), which makes the intended use case unclear.
+- The three providers use very different scope levels (root GCP access vs inference-only vs identity-only), which makes the intended use case unclear.
 
-## The Gemini flow requests broad GCP access
+## The Gemini flow requests root GCP access
 
 The [Gemini OAuth flow](https://github.com/slopus/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect/authenticateGemini.ts#L22-L26) requests `cloud-platform`, `userinfo.email`, and `userinfo.profile`. The `cloud-platform` scope grants access to all GCP services the authenticated account can reach — Cloud Storage, BigQuery, Compute Engine, IAM, Cloud SQL, Secret Manager, etc. The flow also sets [`access_type: 'offline'`](https://github.com/slopus/happy/blob/d343330c86ab966969aecd82be4aecbad7ec4238/packages/happy-cli/src/commands/connect/authenticateGemini.ts#L236), which requests a refresh token that can mint new access tokens indefinitely without further user interaction.
 
